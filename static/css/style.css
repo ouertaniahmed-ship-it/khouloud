@@ -35,7 +35,7 @@ body {
 
 /* === Layout === */
 .app {
-    max-width: 900px;
+    max-width: 1160px;
     margin: 0 auto;
     padding: 2rem 1.5rem;
 }
@@ -351,7 +351,7 @@ header h1 {
 
 canvas {
     display: block;
-    width: 100%;
+    max-width: 100%;
     height: auto;
 }
 
@@ -409,4 +409,92 @@ canvas {
         rgba(255,255,255,0.3) 4px
     );
     border: 1px solid var(--text-dim);
+}
+
+/* === Red Alert Banner === */
+.alert-unplaced {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.9rem 1.25rem;
+    margin-bottom: 1.5rem;
+    background: rgba(255, 107, 107, 0.08);
+    border: 1px solid rgba(255, 107, 107, 0.35);
+    border-left: 4px solid var(--danger);
+    border-radius: var(--radius-sm);
+    color: var(--danger);
+    font-weight: 600;
+    font-size: 0.9rem;
+    animation: alertAppear 0.3s ease, alertPulse 2.4s ease-in-out infinite;
+}
+
+@keyframes alertAppear {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes alertPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0); }
+    50%       { box-shadow: 0 0 0 6px rgba(255, 107, 107, 0.10); }
+}
+
+.alert-icon {
+    font-size: 1.2rem;
+    animation: alertWobble 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes alertWobble {
+    from { transform: rotate(-12deg) scale(1.0); }
+    to   { transform: rotate(12deg)  scale(1.15); }
+}
+
+/* === Stat danger state (Could Not Fit) === */
+.stat.stat-danger {
+    background: rgba(255, 107, 107, 0.07);
+    border-color: rgba(255, 107, 107, 0.40);
+    animation: statDangerPulse 2.4s ease-in-out infinite;
+}
+
+.stat.stat-danger .stat-value {
+    color: var(--danger);
+}
+
+@keyframes statDangerPulse {
+    0%, 100% { border-color: rgba(255, 107, 107, 0.40); }
+    50%       { border-color: rgba(255, 107, 107, 0.80); }
+}
+
+/* === PDF Export Button === */
+.pdf-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 1rem;
+}
+
+.btn-pdf {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.55rem 1.1rem;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-dim);
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-pdf:hover {
+    border-color: var(--text);
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.btn-pdf:active {
+    transform: scale(0.97);
 }

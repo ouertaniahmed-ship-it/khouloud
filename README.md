@@ -50,14 +50,15 @@ Then open [http://127.0.0.1:5000](http://127.0.0.1:5000) in your browser.
 
 ## Algorithm
 
-**Phase 1 — Floor packing** uses the *Maximal Rectangles* heuristic:
+**Phase 1 — Floor packing** uses the Maximal Rectangles heuristic:
 - The free space is tracked as a list of non-overlapping rectangles
 - Each box is placed in the rectangle that gives the best score (bottom-left preference)
 - Both orientations (normal and rotated) are tried for every placement
 - 6 ordering strategies are evaluated in parallel and the best result is kept
 
 **Phase 2 — Stacking:**
-- Any box that could not fit on the floor is stacked on a same-type stackable floor box
-- Each stackable floor position can hold at most one additional box on top
+- Non-stackable boxes fill floor spots first and are never involved in stacking (neither as a base nor on top)
+- Any stackable box that could not fit on the floor is stacked on a same-type stackable floor box
+- Each stackable floor position can hold at most one additional stackable box on top
 
-**Utilization** is reported as the percentage of truck floor area covered by first-layer boxes.
+Utilization is reported as the percentage of truck floor area covered by first-layer boxes.

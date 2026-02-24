@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Truck Loading Optimizer</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="app">
+        <header>
+            <h1>Truck Loading Optimizer</h1>
+            <p class="subtitle">Optimize box placement in a 2.4m &times; 13.2m truck</p>
+        </header>
+
+        <main>
+            <section class="controls">
+                <h2>Box Inventory</h2>
+                <div class="box-grid">
+                    <div class="box-card american">
+                        <div class="box-header">
+                            <span class="box-icon american-icon"></span>
+                            <div>
+                                <h3>American</h3>
+                                <span class="dims">1.0m &times; 1.2m</span>
+                            </div>
+                        </div>
+                        <div class="box-inputs">
+                            <div class="input-group">
+                                <label for="american_stackable">
+                                    <span class="stack-badge stackable">Stackable</span>
+                                </label>
+                                <div class="stepper">
+                                    <button type="button" class="btn-step" onclick="step('american_stackable', -1)">−</button>
+                                    <input type="number" id="american_stackable" value="0" min="0" max="99">
+                                    <button type="button" class="btn-step" onclick="step('american_stackable', 1)">+</button>
+                                </div>
+                            </div>
+                            <div class="input-group">
+                                <label for="american_non_stackable">
+                                    <span class="stack-badge non-stackable">Non-stackable</span>
+                                </label>
+                                <div class="stepper">
+                                    <button type="button" class="btn-step" onclick="step('american_non_stackable', -1)">−</button>
+                                    <input type="number" id="american_non_stackable" value="0" min="0" max="99">
+                                    <button type="button" class="btn-step" onclick="step('american_non_stackable', 1)">+</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="box-card european">
+                        <div class="box-header">
+                            <span class="box-icon european-icon"></span>
+                            <div>
+                                <h3>European</h3>
+                                <span class="dims">1.2m &times; 0.8m</span>
+                            </div>
+                        </div>
+                        <div class="box-inputs">
+                            <div class="input-group">
+                                <label for="european_stackable">
+                                    <span class="stack-badge stackable">Stackable</span>
+                                </label>
+                                <div class="stepper">
+                                    <button type="button" class="btn-step" onclick="step('european_stackable', -1)">−</button>
+                                    <input type="number" id="european_stackable" value="0" min="0" max="99">
+                                    <button type="button" class="btn-step" onclick="step('european_stackable', 1)">+</button>
+                                </div>
+                            </div>
+                            <div class="input-group">
+                                <label for="european_non_stackable">
+                                    <span class="stack-badge non-stackable">Non-stackable</span>
+                                </label>
+                                <div class="stepper">
+                                    <button type="button" class="btn-step" onclick="step('european_non_stackable', -1)">−</button>
+                                    <input type="number" id="european_non_stackable" value="0" min="0" max="99">
+                                    <button type="button" class="btn-step" onclick="step('european_non_stackable', 1)">+</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <button id="optimize-btn" class="btn-optimize" onclick="optimize()">
+                    <span class="btn-text">Optimize Loading</span>
+                    <span class="btn-loader" style="display:none"></span>
+                </button>
+            </section>
+
+            <section class="results" id="results" style="display:none">
+                <h2>Optimization Result</h2>
+                <div class="stats">
+                    <div class="stat">
+                        <span class="stat-value" id="stat-placed">0</span>
+                        <span class="stat-label">Placed</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value" id="stat-floor">0</span>
+                        <span class="stat-label">On Floor</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value" id="stat-stacked">0</span>
+                        <span class="stat-label">Stacked</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value" id="stat-unplaced">0</span>
+                        <span class="stat-label">Could Not Fit</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value" id="stat-util">0%</span>
+                        <span class="stat-label">Floor Used</span>
+                    </div>
+                </div>
+
+                <div class="truck-container">
+                    <div class="truck-label-top">
+                        <span>2.4m</span>
+                    </div>
+                    <div class="truck-wrapper">
+                        <div class="truck-label-side">
+                            <span>13.2m</span>
+                        </div>
+                        <div class="truck-viewport">
+                            <canvas id="truck-canvas"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="legend">
+                    <div class="legend-item">
+                        <span class="legend-color american-s"></span> American Stackable
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color american-ns"></span> American Non-stackable
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color european-s"></span> European Stackable
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color european-ns"></span> European Non-stackable
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color stacked-indicator"></span> Stacked (2nd layer)
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

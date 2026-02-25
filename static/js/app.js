@@ -461,7 +461,7 @@ function exportPDF(data) {
     doc.setLineWidth(0.6);
     doc.rect(truckX, truckY, truckW_mm, truckH_mm);
 
-    cy = truckY + truckH_mm + 4;
+    cy = truckY + truckH_mm + 10;
 
     // ── Unplaced breakdown ────────────────────────────────────────
     doc.setFontSize(6.5);

@@ -42,7 +42,7 @@ if exist TruckLoadingOptimizer.spec del /q TruckLoadingOptimizer.spec
 echo  [2/3] Building executable (this may take a minute)...
 echo.
 
-pyinstaller ^
+python -m PyInstaller ^
     --noconfirm ^
     --onefile ^
     --console ^

@@ -446,7 +446,9 @@ function exportPDF(data) {
     doc.setFontSize(5.5);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(160, 160, 160);
-    doc.text("Truck Loading Optimizer", M, PH - M - 1.5);
+    doc.setFont("times", "italic");
+    doc.text("by Ouertani", M, PH - M - 1.5);
+    doc.setFont("helvetica", "normal");
     doc.text("Page 1 / 1", PW - M, PH - M - 1.5, { align: "right" });
 
     doc.save("truck-loading-report.pdf");

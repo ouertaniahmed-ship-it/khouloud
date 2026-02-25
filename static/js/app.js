@@ -1,5 +1,6 @@
 let animationFrameId = null;
-let lastResult = null;
+let lastResult  = null;
+let lastPayload = null;
 
 function step(id, delta) {
     const input = document.getElementById(id);
@@ -37,6 +38,7 @@ async function optimize() {
             return;
         }
 
+        lastPayload = payload;
         displayResults(data);
     } catch (err) {
         alert("Request failed: " + err.message);
@@ -76,7 +78,23 @@ function displayResults(data) {
         alertEl.style.display = "none";
     }
 
+    // Per-type unplaced breakdown (computed from placed list vs requested counts)
+    const placedAS  = data.placed.filter(b => b.type === "american" &&  b.stackable).length;
+    const placedANS = data.placed.filter(b => b.type === "american" && !b.stackable).length;
+    const placedES  = data.placed.filter(b => b.type === "european" &&  b.stackable).length;
+    const placedENS = data.placed.filter(b => b.type === "european" && !b.stackable).length;
+
+    const breakdown = [
+        { type: "american", stackable: true,  label: "American Stackable",    count: Math.max(0, (lastPayload?.american_stackable     || 0) - placedAS)  },
+        { type: "american", stackable: false, label: "American Non-stackable", count: Math.max(0, (lastPayload?.american_non_stackable || 0) - placedANS) },
+        { type: "european", stackable: true,  label: "European Stackable",    count: Math.max(0, (lastPayload?.european_stackable     || 0) - placedES)  },
+        { type: "european", stackable: false, label: "European Non-stackable", count: Math.max(0, (lastPayload?.european_non_stackable || 0) - placedENS) },
+    ];
+
+    data.unplacedBreakdown = breakdown;
     lastResult = data;
+
+    renderUnplacedBoxes(breakdown);
 
     // Update dimension labels (truck rotated: length = horizontal, width = vertical)
     document.getElementById("label-horizontal").textContent = data.truck_length + "m";
@@ -85,6 +103,36 @@ function displayResults(data) {
     drawTruck(data);
 
     section.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function renderUnplacedBoxes(breakdown) {
+    const section = document.getElementById("unplaced-section");
+    section.style.display = "block";
+
+    const palette = {
+        american_stackable:     { color: "#e17055", bg: "rgba(225,112,85,0.08)",  border: "rgba(225,112,85,0.35)" },
+        american_non_stackable: { color: "#e17055", bg: "rgba(225,112,85,0.04)",  border: "rgba(225,112,85,0.20)" },
+        european_stackable:     { color: "#00b894", bg: "rgba(0,184,148,0.08)",   border: "rgba(0,184,148,0.35)"  },
+        european_non_stackable: { color: "#00b894", bg: "rgba(0,184,148,0.04)",   border: "rgba(0,184,148,0.20)"  },
+    };
+
+    document.getElementById("unplaced-grid").innerHTML = breakdown.map(item => {
+        const key = item.type + "_" + (item.stackable ? "stackable" : "non_stackable");
+        const p   = palette[key];
+        const has = item.count > 0;
+
+        return `
+        <div class="unplaced-card" style="
+            border-top: 3px solid ${p.color};
+            border-color: ${has ? p.border : "var(--border)"};
+            border-top-color: ${p.color};
+            background: ${has ? p.bg : "var(--surface)"};
+        ">
+            <span class="unplaced-card-label">${item.label}</span>
+            <span class="unplaced-card-count" style="color:${has ? p.color : "var(--text-dim)"}; opacity:${has ? 1 : 0.28}">${item.count}</span>
+            <span class="unplaced-card-sub" style="color:${has ? p.color : "var(--text-dim)"}; opacity:${has ? 0.7 : 0.28}">${has ? "could not fit" : "all loaded"}</span>
+        </div>`;
+    }).join("");
 }
 
 function hexToRgba(hex, alpha) {
@@ -413,7 +461,58 @@ function exportPDF(data) {
     doc.setLineWidth(0.6);
     doc.rect(truckX, truckY, truckW_mm, truckH_mm);
 
-    cy = truckY + truckH_mm + 5;
+    cy = truckY + truckH_mm + 4;
+
+    // ── Unplaced breakdown ────────────────────────────────────────
+    doc.setFontSize(6.5);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(0);
+    doc.text("UNLOADED BOXES", M + 2, cy);
+    doc.setLineWidth(0.2);
+    doc.setDrawColor(180, 180, 180);
+    doc.line(M, cy + 1.5, PW - M, cy + 1.5);
+    cy += 4;
+
+    const cardW = (UW - 6) / 4;
+    const cardH = 14;
+
+    (data.unplacedBreakdown || []).forEach((item, i) => {
+        const cx  = M + 1 + i * (cardW + 2);
+        const isA = item.type === "american";
+        const has = item.count > 0;
+
+        // Background + border
+        if (has) {
+            doc.setFillColor(isA ? 255 : 245, isA ? 248 : 255, isA ? 246 : 253);
+            doc.setDrawColor(isA ? 225 : 0, isA ? 112 : 184, isA ? 85 : 148);
+        } else {
+            doc.setFillColor(248, 248, 248);
+            doc.setDrawColor(210, 210, 210);
+        }
+        doc.setLineWidth(0.3);
+        doc.rect(cx, cy, cardW, cardH, "FD");
+
+        // Coloured top bar
+        if (isA) doc.setFillColor(225, 112, 85);
+        else      doc.setFillColor(0, 184, 148);
+        doc.rect(cx, cy, cardW, 1.2, "F");
+
+        // Count
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "bold");
+        if (!has)      doc.setTextColor(190, 190, 190);
+        else if (isA)  doc.setTextColor(200, 80, 55);
+        else           doc.setTextColor(0, 145, 115);
+        doc.text(String(item.count), cx + cardW / 2, cy + 8, { align: "center" });
+
+        // Label
+        doc.setFontSize(4.8);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(110, 110, 110);
+        doc.text(item.label, cx + cardW / 2, cy + 12.5, { align: "center" });
+    });
+
+    cy += cardH + 4;
 
     // ── Legend ────────────────────────────────────────────────────
     doc.setTextColor(0);

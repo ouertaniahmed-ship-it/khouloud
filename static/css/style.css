@@ -355,6 +355,59 @@ canvas {
     height: auto;
 }
 
+/* === Unplaced Breakdown === */
+.unplaced-section {
+    margin-bottom: 1.25rem;
+    animation: fadeIn 0.4s ease;
+}
+
+.unplaced-title {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+    margin-bottom: 0.6rem;
+}
+
+.unplaced-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.75rem;
+}
+
+@media (max-width: 600px) {
+    .unplaced-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+.unplaced-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.85rem 1rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.unplaced-card-label {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    font-weight: 500;
+}
+
+.unplaced-card-count {
+    font-size: 1.9rem;
+    font-weight: 700;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    line-height: 1.1;
+}
+
+.unplaced-card-sub {
+    font-size: 0.65rem;
+    font-style: italic;
+    letter-spacing: 0.02em;
+}
+
 /* === Legend === */
 .legend {
     display: flex;

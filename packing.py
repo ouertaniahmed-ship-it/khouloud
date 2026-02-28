@@ -340,34 +340,125 @@ def _apply_stacking(floor_placed: list[PlacedBox],
     return stacked, not_placed
 
 
+# ── Custom-box shelf packing ─────────────────────────────────────────
+
+def _pack_custom_boxes(custom_types: list, remaining_length: float) -> tuple:
+    """
+    Pack arbitrary-dimension custom boxes into the remaining truck space
+    using a greedy shelf (strip) algorithm.
+
+    Each custom type dict: {id, name, width, length, stackable, non_stackable}
+
+    Returns (placed_list, per_type_counts_dict)
+    where per_type_counts_dict maps type_id -> {floor, stacked, total_requested}.
+    """
+    placed: list[PlacedBox] = []
+    counts: dict = {}
+
+    # Build a flat list of boxes to place, non-stackable first (they must go on floor)
+    floor_boxes = []
+    for ct in custom_types:
+        tid = ct["id"]
+        ns = max(0, int(ct.get("non_stackable", 0)))
+        s = max(0, int(ct.get("stackable", 0)))
+        bw = float(ct["width"])
+        bl = float(ct["length"])
+        counts[tid] = {"floor": 0, "stacked": 0, "requested": ns + s,
+                        "name": ct["name"], "width": bw, "length": bl}
+        # Non-stackable boxes first (they can only go on floor)
+        for _ in range(ns):
+            floor_boxes.append((tid, bw, bl, False))
+        for _ in range(s):
+            floor_boxes.append((tid, bw, bl, True))
+
+    if not floor_boxes:
+        return placed, counts
+
+    # Greedy shelf packing into remaining_length x TRUCK_WIDTH area
+    # Each shelf has a fixed height (depth along truck) = tallest box in that shelf
+    shelves = []  # list of (y_start, shelf_height, boxes_in_shelf)
+    y_cursor = 0.0
+
+    for tid, bw, bl, stackable in floor_boxes:
+        # Try both orientations
+        orientations = [(bw, bl), (bl, bw)]
+        fitted = False
+
+        for ow, oh in orientations:
+            if ow > TRUCK_WIDTH + EPS or oh > remaining_length + EPS:
+                continue
+
+            # Try to fit in an existing shelf
+            for shelf in shelves:
+                sy, sh, sboxes = shelf
+                if oh > sh + EPS:
+                    continue
+                # Find rightmost edge in this shelf
+                x_cursor = sum(sb[1] for sb in sboxes)
+                if x_cursor + ow <= TRUCK_WIDTH + EPS:
+                    sboxes.append((tid, ow, oh, stackable))
+                    p = PlacedBox(x_cursor, sy, ow, oh, tid, stackable)
+                    placed.append(p)
+                    counts[tid]["floor"] += 1
+                    fitted = True
+                    break
+
+            if fitted:
+                break
+
+            # Open a new shelf
+            if y_cursor + oh <= remaining_length + EPS:
+                shelf_entry = (y_cursor, oh, [(tid, ow, oh, stackable)])
+                shelves.append(shelf_entry)
+                p = PlacedBox(0.0, y_cursor, ow, oh, tid, stackable)
+                placed.append(p)
+                counts[tid]["floor"] += 1
+                y_cursor += oh
+                fitted = True
+                break
+
+        # If not fitted, box is unplaced (counts will show the gap)
+
+    # Apply stacking for custom boxes: stackable leftover on stackable floor bases, same type
+    for ct in custom_types:
+        tid = ct["id"]
+        info = counts[tid]
+        total_s = max(0, int(ct.get("stackable", 0)))
+        total_ns = max(0, int(ct.get("non_stackable", 0)))
+
+        floor_total = info["floor"]
+        ns_on_floor = min(total_ns, floor_total)
+        s_on_floor = floor_total - ns_on_floor
+        s_leftover = total_s - s_on_floor
+
+        if s_leftover <= 0:
+            continue
+
+        # Find stackable floor bases for this type
+        bases = [p for p in placed if p.box_type == tid and p.stackable and not p.stacked]
+        to_stack = min(s_leftover, len(bases))
+        for base in bases[:to_stack]:
+            stacked_box = PlacedBox(base.x, base.y, base.w, base.h, tid,
+                                     stackable=True, stacked=True)
+            placed.append(stacked_box)
+            info["stacked"] += 1
+
+    return placed, counts
+
+
 # ── Public API ────────────────────────────────────────────────────────
 
 def pack_boxes_with_stacking(american_stackable: int,
                               american_non_stackable: int,
                               european_stackable: int,
-                              european_non_stackable: int) -> dict:
+                              european_non_stackable: int,
+                              custom_boxes: list | None = None) -> dict:
     """
     Pack boxes into the truck. Returns a dict with placement details.
 
-    Parameters
-    ----------
-    american_stackable       : American boxes that CAN be stacked
-    american_non_stackable   : American boxes that CANNOT be stacked
-    european_stackable       : European boxes that CAN be stacked
-    european_non_stackable   : European boxes that CANNOT be stacked
-
-    Returns
-    -------
-    dict with keys:
-      placed          – list of box dicts (floor + stacked)
-      floor_count     – number of floor boxes
-      stacked_count   – number of stacked boxes
-      total_placed    – floor + stacked
-      not_placed      – boxes that did not fit
-      total_requested – total input boxes
-      truck_width     – 2.4
-      truck_length    – 13.2
-      utilization     – floor area utilization %
+    Standard American/European boxes are packed first using optimised row
+    patterns.  Then any custom boxes fill the remaining truck length using
+    a greedy shelf algorithm.
     """
     am_s  = max(0, american_stackable)
     am_ns = max(0, american_non_stackable)
@@ -377,38 +468,79 @@ def pack_boxes_with_stacking(american_stackable: int,
     total_am = am_s + am_ns
     total_eu = eu_s + eu_ns
 
-    if total_am + total_eu == 0:
+    custom_types = custom_boxes or []
+    total_custom_requested = sum(
+        max(0, int(ct.get("stackable", 0))) + max(0, int(ct.get("non_stackable", 0)))
+        for ct in custom_types
+    )
+
+    if total_am + total_eu + total_custom_requested == 0:
         return {
             "placed": [], "floor_count": 0, "stacked_count": 0,
             "total_placed": 0, "not_placed": 0, "total_requested": 0,
             "truck_width": TRUCK_WIDTH, "truck_length": TRUCK_LENGTH,
-            "utilization": 0.0,
+            "utilization": 0.0, "custom_counts": {},
         }
 
-    a, b, c, d, extra_rows = _find_best_row_config(
-        total_am, total_eu, am_s, am_ns, eu_s, eu_ns
+    # ── Standard packing ──────────────────────────────────────────
+    floor_placed: list[PlacedBox] = []
+    stacked: list[PlacedBox] = []
+    not_placed_std = 0
+    used_length = 0.0
+
+    if total_am + total_eu > 0:
+        a, b, c, d, extra_rows = _find_best_row_config(
+            total_am, total_eu, am_s, am_ns, eu_s, eu_ns
+        )
+
+        floor_placed = _generate_placements(
+            a, b, c, d, extra_rows,
+            am_s, am_ns, eu_s, eu_ns,
+        )
+
+        stacked, not_placed_std = _apply_stacking(
+            floor_placed, am_s, am_ns, eu_s, eu_ns
+        )
+
+        # Calculate used truck length from standard boxes
+        if floor_placed:
+            used_length = max(p.y + p.h for p in floor_placed)
+
+    # ── Custom box packing ────────────────────────────────────────
+    custom_placed: list[PlacedBox] = []
+    custom_counts: dict = {}
+
+    if custom_types:
+        remaining = TRUCK_LENGTH - used_length
+        custom_placed, custom_counts = _pack_custom_boxes(custom_types, remaining)
+        # Offset custom boxes by used_length
+        for p in custom_placed:
+            p.y += used_length
+
+    # ── Combine results ───────────────────────────────────────────
+    all_floor = floor_placed + [p for p in custom_placed if not p.stacked]
+    all_stacked = stacked + [p for p in custom_placed if p.stacked]
+
+    all_placed_dicts = [_box_to_dict(p) for p in all_floor] + [_box_to_dict(p) for p in all_stacked]
+    floor_area = sum(p.w * p.h for p in all_floor)
+
+    custom_not_placed = sum(
+        max(0, info["requested"] - info["floor"] - info["stacked"])
+        for info in custom_counts.values()
     )
 
-    floor_placed = _generate_placements(
-        a, b, c, d, extra_rows,
-        am_s, am_ns, eu_s, eu_ns,
-    )
-
-    stacked, not_placed = _apply_stacking(
-        floor_placed, am_s, am_ns, eu_s, eu_ns
-    )
-
-    all_placed  = [_box_to_dict(p) for p in floor_placed] + [_box_to_dict(p) for p in stacked]
-    floor_area  = sum(p.w * p.h for p in floor_placed)
+    total_not_placed = not_placed_std + custom_not_placed
+    total_requested = total_am + total_eu + total_custom_requested
 
     return {
-        "placed":          all_placed,
-        "floor_count":     len(floor_placed),
-        "stacked_count":   len(stacked),
-        "total_placed":    len(floor_placed) + len(stacked),
-        "not_placed":      not_placed,
-        "total_requested": total_am + total_eu,
+        "placed":          all_placed_dicts,
+        "floor_count":     len(all_floor),
+        "stacked_count":   len(all_stacked),
+        "total_placed":    len(all_floor) + len(all_stacked),
+        "not_placed":      total_not_placed,
+        "total_requested": total_requested,
         "truck_width":     TRUCK_WIDTH,
         "truck_length":    TRUCK_LENGTH,
         "utilization":     round(floor_area / (TRUCK_WIDTH * TRUCK_LENGTH) * 100, 1),
+        "custom_counts":   {k: {kk: vv for kk, vv in v.items()} for k, v in custom_counts.items()},
     }

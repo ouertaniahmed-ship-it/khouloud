@@ -20,6 +20,7 @@ def optimize():
             american_non_stackable=int(data.get("american_non_stackable", 0)),
             european_stackable=int(data.get("european_stackable", 0)),
             european_non_stackable=int(data.get("european_non_stackable", 0)),
+            custom_boxes=data.get("custom_boxes"),
         )
         return jsonify(result)
     except Exception as e:

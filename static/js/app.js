@@ -27,6 +27,21 @@ function deleteCustomType(id) {
     renderCustomCards();
 }
 
+function _captureCustomInputs() {
+    const out = {};
+    document.querySelectorAll(".box-card.custom-card input[type=number]").forEach(el => {
+        if (el.id) out[el.id] = el.value;
+    });
+    return out;
+}
+
+function _restoreCustomInputs(snapshot) {
+    Object.entries(snapshot).forEach(([id, val]) => {
+        const el = document.getElementById(id);
+        if (el) el.value = val;
+    });
+}
+
 // ── Add-type form ─────────────────────────────────────────────────────
 
 function showAddTypeForm() {
@@ -67,7 +82,9 @@ function saveCustomType() {
 // ── Render custom cards ───────────────────────────────────────────────
 
 function renderCustomCards() {
-    // Remove old custom cards
+    // Preserve typed quantities so a delete or reorder doesn't wipe the user's input.
+    const snapshot = _captureCustomInputs();
+
     document.querySelectorAll(".box-card.custom-card").forEach(el => el.remove());
 
     const grid = document.querySelector(".box-grid");
@@ -112,6 +129,8 @@ function renderCustomCards() {
         `;
         grid.appendChild(card);
     });
+
+    _restoreCustomInputs(snapshot);
 }
 
 function escapeHtml(str) {
@@ -135,6 +154,9 @@ async function optimize() {
     const btn = document.getElementById("optimize-btn");
     const btnText = btn.querySelector(".btn-text");
     const btnLoader = btn.querySelector(".btn-loader");
+
+    // Hide any prior result so an aborted run can't leave a stale visualization on screen.
+    document.getElementById("results").style.display = "none";
 
     btn.disabled = true;
     btnText.textContent = "Optimizing...";
@@ -218,6 +240,10 @@ function buildLabelMap() {
 
 function displayResults(data) {
     const section = document.getElementById("results");
+    if (!data || data.total_requested === 0) {
+        section.style.display = "none";
+        return;
+    }
     section.style.display = "block";
 
     document.getElementById("stat-placed").textContent = data.total_placed;
@@ -523,7 +549,7 @@ function drawBox(ctx, box, scale, pad, colorDefs, labelMap, isStacked) {
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         const label = labelMap[box.type] || box.type.substring(0, 3).toUpperCase();
-        const sublabel = isStacked ? "\u00d72" : (box.rotated ? "R" : "");
+        const sublabel = isStacked ? "\u00d72" : "";
         ctx.fillText(label, x + w / 2, y + h / 2 - (sublabel ? 4 : 0));
         if (sublabel) {
             ctx.font = `${fontSize - 1}px -apple-system, sans-serif`;
@@ -606,8 +632,8 @@ function exportPDF(data) {
         doc.rect(bx, cy, boxW - 1, boxH, "FD");
         doc.setFontSize(15);
         doc.setFont("helvetica", "bold");
-        doc.setTextColor(s.alert ? 160 : 15, 0, 0);
-        if (!s.alert) doc.setTextColor(15, 15, 15);
+        if (s.alert) doc.setTextColor(160, 0, 0);
+        else         doc.setTextColor(15, 15, 15);
         doc.text(s.value, bx + (boxW - 1) / 2, cy + 8.5, { align: "center" });
         doc.setFontSize(5);
         doc.setFont("helvetica", "normal");
@@ -766,7 +792,8 @@ function exportPDF(data) {
     doc.setFont("times", "italic");
     doc.text("by Ouertani", M, PH - M - 1.5);
     doc.setFont("helvetica", "normal");
-    doc.text("Page 1 / 1", PW - M, PH - M - 1.5, { align: "right" });
+    const pageCount = doc.getNumberOfPages();
+    doc.text(`Page 1 / ${pageCount}`, PW - M, PH - M - 1.5, { align: "right" });
 
     doc.save("truck-loading-report.pdf");
 }

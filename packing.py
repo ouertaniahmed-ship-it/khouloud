@@ -103,32 +103,34 @@ def _greedy_fill(am_left: int, eu_left: int, remaining_len: float) -> list:
 
 def _find_best_row_config(total_am: int, total_eu: int,
                           am_s: int, am_ns: int,
-                          eu_s: int, eu_ns: int) -> tuple:
+                          eu_s: int, eu_ns: int,
+                          max_length: float = TRUCK_LENGTH) -> tuple:
     """
     Search for the combination of row types A/B/C/D that maximises
-    TOTAL boxes loaded (floor + legally stacked) within the 13.2m length.
+    TOTAL boxes loaded (floor + legally stacked) within `max_length` metres.
+    Caller can pass a reduced `max_length` to reserve truck length for custom boxes.
     """
     best      = None
     best_score = (-1, 0, 0)
 
-    max_a = min(total_am // 2,  int(TRUCK_LENGTH / 1.0 + EPS))
-    max_c = min(total_eu // 3,  int(TRUCK_LENGTH / 1.2 + EPS))
+    max_a = min(total_am // 2,  int(max_length / 1.0 + EPS))
+    max_c = min(total_eu // 3,  int(max_length / 1.2 + EPS))
 
     for a in range(max_a + 1):
         len_a = a * 1.0
-        if len_a > TRUCK_LENGTH + EPS:
+        if len_a > max_length + EPS:
             break
 
         for c in range(max_c + 1):
             len_ac = len_a + c * 1.2
-            if len_ac > TRUCK_LENGTH + EPS:
+            if len_ac > max_length + EPS:
                 break
             eu_after_c = total_eu - 3 * c
             if eu_after_c < 0:
                 break
 
             am_after_a  = total_am - 2 * a
-            rem_len      = TRUCK_LENGTH - len_ac
+            rem_len      = max_length - len_ac
             max_d        = min(am_after_a, eu_after_c, int(rem_len / 1.0 + EPS))
 
             for d in range(max_d + 1):
@@ -136,36 +138,69 @@ def _find_best_row_config(total_am: int, total_eu: int,
                 eu_left = eu_after_c - d
                 rem      = rem_len - d * 1.0
 
-                b        = min(eu_left // 2, int(rem / 0.8 + EPS))
-                used_len = len_ac + d * 1.0 + b * 0.8
-                leftover = TRUCK_LENGTH - used_len
-                eu_rem   = eu_left - 2 * b
+                max_b = min(eu_left // 2, int(rem / 0.8 + EPS))
+                for b in range(max_b + 1):
+                    used_len = len_ac + d * 1.0 + b * 0.8
+                    leftover = max_length - used_len
+                    eu_rem   = eu_left - 2 * b
 
-                extra_rows = _greedy_fill(am_left, eu_rem, leftover)
-                extra_am   = sum(r[1] for r in extra_rows)
-                extra_eu   = sum(r[2] for r in extra_rows)
-                extra_len  = sum(r[3] for r in extra_rows)
+                    extra_rows = _greedy_fill(am_left, eu_rem, leftover)
+                    extra_am   = sum(r[1] for r in extra_rows)
+                    extra_eu   = sum(r[2] for r in extra_rows)
+                    extra_len  = sum(r[3] for r in extra_rows)
 
-                floor_am = 2 * a + d + extra_am
-                floor_eu = 3 * c + d + 2 * b + extra_eu
+                    floor_am = 2 * a + d + extra_am
+                    floor_eu = 3 * c + d + 2 * b + extra_eu
 
-                # Actual placed on floor (capped by available boxes)
-                placed_am_floor = min(floor_am, total_am)
-                placed_eu_floor = min(floor_eu, total_eu)
+                    placed_am_floor = min(floor_am, total_am)
+                    placed_eu_floor = min(floor_eu, total_eu)
 
-                stacked_am = _max_stackable_bonus(placed_am_floor, am_s, am_ns)
-                stacked_eu = _max_stackable_bonus(placed_eu_floor, eu_s, eu_ns)
+                    stacked_am = _max_stackable_bonus(placed_am_floor, am_s, am_ns)
+                    stacked_eu = _max_stackable_bonus(placed_eu_floor, eu_s, eu_ns)
 
-                total_with_stacking = placed_am_floor + placed_eu_floor + stacked_am + stacked_eu
-                total_len  = used_len + extra_len
-                num_rows   = a + b + c + d + len(extra_rows)
+                    total_with_stacking = placed_am_floor + placed_eu_floor + stacked_am + stacked_eu
+                    total_len  = used_len + extra_len
+                    num_rows   = a + b + c + d + len(extra_rows)
 
-                score = (total_with_stacking, -num_rows, -total_len)
-                if score > best_score:
-                    best_score = score
-                    best = (a, b, c, d, extra_rows)
+                    score = (total_with_stacking, -num_rows, -total_len)
+                    if score > best_score:
+                        best_score = score
+                        best = (a, b, c, d, extra_rows)
 
     return best if best is not None else (0, 0, 0, 0, [])
+
+
+def _estimate_custom_length(custom_types: list) -> float:
+    """
+    Conservative estimate of truck length needed for the requested custom boxes,
+    so the standard packer can reserve that much length.
+
+    Accounts for stacking (half of stackable boxes end up on floor).
+    Lower-bounded by the smallest dimension of the largest custom box so a single
+    big box never gets squeezed out by floor-area math.
+    """
+    if not custom_types:
+        return 0.0
+    total_area  = 0.0
+    max_min_dim = 0.0
+    for ct in custom_types:
+        try:
+            bw = float(ct.get("width", 0))
+            bl = float(ct.get("length", 0))
+        except (TypeError, ValueError):
+            continue
+        if bw <= 0 or bl <= 0:
+            continue
+        ns = max(0, int(ct.get("non_stackable", 0)))
+        s  = max(0, int(ct.get("stackable", 0)))
+        if ns + s == 0:
+            continue
+        floor_count = ns + (s + 1) // 2
+        total_area += floor_count * bw * bl
+        max_min_dim = max(max_min_dim, min(bw, bl))
+    if max_min_dim == 0.0:
+        return 0.0
+    return max(total_area / TRUCK_WIDTH, max_min_dim)
 
 
 # ── Coordinate generation ─────────────────────────────────────────────
@@ -482,40 +517,46 @@ def pack_boxes_with_stacking(american_stackable: int,
             "utilization": 0.0, "custom_counts": {},
         }
 
-    # ── Standard packing ──────────────────────────────────────────
-    floor_placed: list[PlacedBox] = []
-    stacked: list[PlacedBox] = []
-    not_placed_std = 0
-    used_length = 0.0
+    # ── Joint packing: try standard with a length budget reserved for
+    #    custom boxes, also try unconstrained, and keep whichever places
+    #    more boxes overall.
+    def _run(max_length: float) -> tuple:
+        if total_am + total_eu > 0:
+            a, b, c, d, extra_rows = _find_best_row_config(
+                total_am, total_eu, am_s, am_ns, eu_s, eu_ns, max_length
+            )
+            floor = _generate_placements(
+                a, b, c, d, extra_rows, am_s, am_ns, eu_s, eu_ns,
+            )
+            stk, np_std = _apply_stacking(floor, am_s, am_ns, eu_s, eu_ns)
+            used = max((p.y + p.h for p in floor), default=0.0)
+        else:
+            floor, stk, np_std, used = [], [], 0, 0.0
 
-    if total_am + total_eu > 0:
-        a, b, c, d, extra_rows = _find_best_row_config(
-            total_am, total_eu, am_s, am_ns, eu_s, eu_ns
-        )
+        if custom_types:
+            cp, cc = _pack_custom_boxes(custom_types, TRUCK_LENGTH - used)
+            for p in cp:
+                p.y += used
+        else:
+            cp, cc = [], {}
 
-        floor_placed = _generate_placements(
-            a, b, c, d, extra_rows,
-            am_s, am_ns, eu_s, eu_ns,
-        )
-
-        stacked, not_placed_std = _apply_stacking(
-            floor_placed, am_s, am_ns, eu_s, eu_ns
-        )
-
-        # Calculate used truck length from standard boxes
-        if floor_placed:
-            used_length = max(p.y + p.h for p in floor_placed)
-
-    # ── Custom box packing ────────────────────────────────────────
-    custom_placed: list[PlacedBox] = []
-    custom_counts: dict = {}
+        total = len(floor) + len(stk) + len(cp)
+        return floor, stk, np_std, used, cp, cc, total
 
     if custom_types:
-        remaining = TRUCK_LENGTH - used_length
-        custom_placed, custom_counts = _pack_custom_boxes(custom_types, remaining)
-        # Offset custom boxes by used_length
-        for p in custom_placed:
-            p.y += used_length
+        budget = _estimate_custom_length(custom_types)
+        if budget > 0.0:
+            constrained   = _run(max(0.0, TRUCK_LENGTH - budget))
+            unconstrained = _run(TRUCK_LENGTH)
+            # Prefer the run that places more total boxes; ties → constrained
+            # (same total, but with custom boxes seated, which the user explicitly wants).
+            chosen = constrained if constrained[6] >= unconstrained[6] else unconstrained
+        else:
+            chosen = _run(TRUCK_LENGTH)
+    else:
+        chosen = _run(TRUCK_LENGTH)
+
+    floor_placed, stacked, not_placed_std, used_length, custom_placed, custom_counts, _ = chosen
 
     # ── Combine results ───────────────────────────────────────────
     all_floor = floor_placed + [p for p in custom_placed if not p.stacked]

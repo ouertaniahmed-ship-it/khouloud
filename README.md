@@ -19,22 +19,27 @@ Given a truck floor of **2.4m × 13.2m**, pack a mix of box types as efficiently
 ## Features
 
 - Input the quantity of each box type via steppers
-- Optimization runs 6 different packing strategies and picks the best result
+- Define additional **custom box types** (any width × length) — saved in the browser
+- Joint floor-and-stacking search that reserves truck length for custom boxes when needed
 - Interactive top-down truck visualization rendered on HTML5 Canvas
 - Stats: total placed, floor count, stacked count, unfit boxes, floor utilization %
-- Color-coded boxes with rotation and stacking indicators
+- One-click PDF report (bundled jsPDF — works offline)
 
 ## Project Structure
 
 ```
 .
 ├── app.py          # Flask server — serves UI and /api/optimize endpoint
-├── packing.py      # Maximal rectangles bin-packing algorithm
+├── packing.py      # Strip/shelf bin-packing with stacking
+├── launcher.py     # PyInstaller entry point (bundled .exe)
+├── build_windows.bat
 ├── templates/
 │   └── index.html  # Single-page UI
 └── static/
     ├── css/style.css
-    └── js/app.js
+    └── js/
+        ├── app.js
+        └── jspdf.umd.min.js   # bundled, no CDN
 ```
 
 ## Setup
@@ -50,15 +55,29 @@ Then open [http://127.0.0.1:5000](http://127.0.0.1:5000) in your browser.
 
 ## Algorithm
 
-**Phase 1 — Floor packing** uses the Maximal Rectangles heuristic:
-- The free space is tracked as a list of non-overlapping rectangles
-- Each box is placed in the rectangle that gives the best score (bottom-left preference)
-- Both orientations (normal and rotated) are tried for every placement
-- 6 ordering strategies are evaluated in parallel and the best result is kept
+**Phase 1 — Standard floor packing** searches over four zero-waste row patterns
+that exactly fill the 2.4 m width:
+
+| Row | Composition | Depth |
+|-----|---|---|
+| A   | 2 American (1.2 × 1.0) | 1.0 m |
+| B   | 2 European (1.2 × 0.8) | 0.8 m |
+| C   | 3 European (0.8 × 1.2) | 1.2 m |
+| D   | 1 American + 1 European | 1.0 m |
+
+The optimiser enumerates `(a, b, c, d)` counts, scores each layout by
+`(total_placed, fewer_rows, shorter_length)`, and falls back to partial-row
+variants (pA / pB / pE2) to fill any remainder.
 
 **Phase 2 — Stacking:**
-- Non-stackable boxes fill floor spots first and are never involved in stacking (neither as a base nor on top)
-- Any stackable box that could not fit on the floor is stacked on a same-type stackable floor box
-- Each stackable floor position can hold at most one additional stackable box on top
+- Non-stackable boxes fill floor spots first; they are never base nor top.
+- Any stackable box that could not fit on the floor is stacked on a same-type stackable floor box.
+- Each stackable floor position can hold at most one additional same-type box on top.
+
+**Phase 3 — Custom boxes:** A greedy shelf packer places user-defined box
+types in the remaining truck length, with the same stacking rules. Before
+running Phase 1, the standard packer is given a length budget that reserves
+room for the estimated custom-box footprint, so a single 1.5 × 1.5 custom
+box can't be squeezed out by a maximally-greedy European strip.
 
 Utilization is reported as the percentage of truck floor area covered by first-layer boxes.
